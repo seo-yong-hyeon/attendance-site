@@ -66,6 +66,8 @@ if not exist ".git" (
   git branch -M main
 )
 
+call :ENSURE_ID
+
 git add .
 
 git status --porcelain | findstr /c:".env.local" >nul 2>nul
@@ -88,7 +90,14 @@ git push -u origin main
 
 if errorlevel 1 (
   echo.
-  echo [오류] 업로드에 실패했습니다. 저장소 주소와 로그인을 확인해 주세요.
+  echo [오류] 업로드에 실패했습니다.
+  echo.
+  echo        위 메시지에 rejected 또는 fetch first 가 보이면
+  echo        저장소를 만들 때 README 를 같이 만든 경우입니다.
+  echo        아래 명령을 한 번 실행한 뒤 이 파일을 다시 실행하세요.
+  echo.
+  echo          git pull --rebase origin main
+  echo.
   pause
   exit /b 1
 )
@@ -99,3 +108,19 @@ echo  업로드 완료. 이제 vercel.com 에서
 echo  Add New - Project 로 이 저장소를 Import 하세요.
 echo ============================================
 pause
+
+exit /b
+
+:ENSURE_ID
+git config user.name >nul 2>nul
+if not errorlevel 1 goto CHECK_MAIL
+echo.
+echo  Git 을 처음 쓰시는군요. 커밋 기록에 남길 정보가 필요합니다.
+set /p GNAME=  이름 (예: seo-yong-hyeon): 
+git config user.name "%GNAME%"
+:CHECK_MAIL
+git config user.email >nul 2>nul
+if not errorlevel 1 exit /b
+set /p GMAIL=  GitHub 가입 이메일: 
+git config user.email "%GMAIL%"
+exit /b

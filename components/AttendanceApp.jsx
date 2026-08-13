@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { Upload, FileSpreadsheet, Save, Check, Trash2, LogOut } from "lucide-react";
+import { Upload, FileSpreadsheet, Save, Check, Trash2, LogOut, QrCode, X } from "lucide-react";
+import QRCode from "qrcode";
 import { supabase } from "../lib/supabaseClient";
 import { CODES, codeOf, fromRow } from "../lib/codes";
 import * as db from "../lib/db";
+import PlacementApp from "./placement/PlacementApp";
 
 const SCHOOL = "세연중학교";
 const DAY = ["일", "월", "화", "수", "목", "금", "토"];
@@ -38,6 +40,7 @@ export default function AttendanceApp() {
   const [marks, setMarks] = useState({});
   const [dirty, setDirty] = useState(new Set());
   const [saving, setSaving] = useState(false);
+  const [qrSession, setQrSession] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -105,10 +108,37 @@ export default function AttendanceApp() {
     }
   }
 
+  async function startQr() {
+    setError("");
+    try {
+      const session = await db.getOrCreateSession(
+        klass.id,
+        current.date,
+        current.kind
+      );
+      setQrSession(session);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function reloadMarks() {
+    const s = await db.findSession(klass.id, current.date, current.kind);
+    const rows = s ? await db.listAttendance([s.id]) : [];
+    const byNo = {};
+    rows.forEach((r) => {
+      const st = students.find((x) => x.id === r.student_id);
+      if (st) byNo[st.student_no] = { code: fromRow(r), memo: r.note || "" };
+    });
+    setMarks(byNo);
+    setDirty(new Set());
+  }
+
   const tabs = [
     { id: "sheet", label: "출석부" },
     { id: "roster", label: "학생관리" },
     { id: "report", label: "지각/결석 조회" },
+    { id: "placement", label: "반편성" },
   ];
 
   if (loading)
@@ -168,6 +198,7 @@ export default function AttendanceApp() {
             dirty={dirty}
             saving={saving}
             onSave={save}
+            onStartQr={startQr}
           />
         )}
         {tab === "roster" && (
@@ -180,12 +211,89 @@ export default function AttendanceApp() {
           />
         )}
         {tab === "report" && <Report klass={klass} students={students} />}
+        {tab === "placement" && <PlacementApp />}
       </div>
+
+      {qrSession && (
+        <QrModal
+          session={qrSession}
+          total={students.length}
+          onClose={() => {
+            setQrSession(null);
+            reloadMarks().catch(() => {});
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function Sheet({ klass, students, slots, current, setCurrent, marks, setCell, dirty, saving, onSave }) {
+function QrModal({ session, total, onClose }) {
+  const [img, setImg] = useState("");
+  const [count, setCount] = useState(0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const token = await db.getOrCreateQrToken(session.id);
+        const url = `${window.location.origin}/checkin?t=${token}`;
+        const data = await QRCode.toDataURL(url, { width: 720, margin: 1 });
+        if (alive) setImg(data);
+      } catch (e) {
+        if (alive) setError(e.message);
+      }
+    })();
+
+    const poll = setInterval(async () => {
+      try {
+        const rows = await db.listAttendance([session.id]);
+        if (alive) setCount(rows.length);
+      } catch (e) {
+        /* 무시하고 다음 주기에 다시 */
+      }
+    }, 4000);
+
+    return () => {
+      alive = false;
+      clearInterval(poll);
+    };
+  }, [session.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900 px-6">
+      <button
+        onClick={onClose}
+        className="absolute right-5 top-5 flex items-center gap-1 text-sm text-slate-300 hover:text-white"
+      >
+        <X size={18} /> 닫기
+      </button>
+
+      <p className="mb-1 text-sm text-slate-400">휴대폰 카메라로 찍으세요</p>
+      <p className="mb-5 text-3xl font-bold text-yellow-400">
+        {count} <span className="text-lg text-slate-400">/ {total}</span>
+      </p>
+
+      <div className="rounded-xl bg-white p-4">
+        {img ? (
+          <img src={img} alt="출결 QR" className="h-64 w-64 sm:h-80 sm:w-80" />
+        ) : (
+          <div className="flex h-64 w-64 items-center justify-center text-sm text-slate-400 sm:h-80 sm:w-80">
+            {error || "QR 만드는 중…"}
+          </div>
+        )}
+      </div>
+
+      <p className="mt-4 text-center text-sm text-slate-400">
+        이 QR 은 이번 조회·종례 동안 계속 쓸 수 있습니다.
+      </p>
+    </div>
+  );
+}
+
+function Sheet({ klass, students, slots, current, setCurrent, marks, setCell, dirty, saving, onSave, onStartQr }) {
   const summary = useMemo(() => {
     const c = {};
     Object.values(marks).forEach((m) => {
@@ -199,9 +307,17 @@ function Sheet({ klass, students, slots, current, setCurrent, marks, setCell, di
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <span className="text-sm text-slate-500">{students.length}명</span>
         <h2 className="text-base font-semibold">{klass?.name}</h2>
-        <button className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white">
-          <FileSpreadsheet size={14} /> 엑셀
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onStartQr}
+            className="flex items-center gap-1.5 rounded bg-slate-800 px-3 py-1.5 text-sm font-medium text-white"
+          >
+            <QrCode size={14} /> QR 출결
+          </button>
+          <button className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white">
+            <FileSpreadsheet size={14} /> 엑셀
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto border-b border-slate-200 px-4 py-3">
@@ -241,10 +357,11 @@ function Sheet({ klass, students, slots, current, setCurrent, marks, setCell, di
                 <tr key={st.id} className="border-b border-slate-100">
                   <td className="px-4 py-1.5">
                     <div className="font-medium">
-                      {st.name || `${st.student_no}번`}
+                      {st.name || st.student_code || `${st.student_no}번`}
                     </div>
                     <div className="text-xs text-slate-400">
-                      {klass?.name} {st.student_no}번
+                      {st.student_code ? `${st.student_no}번` : klass?.name}
+                      {st.user_id ? " · 연결됨" : ""}
                     </div>
                   </td>
                   <td className="px-3 py-1.5">
@@ -320,7 +437,7 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
       if (!data.length) return setError("첫 번째 시트가 비어 있습니다.");
       setRows(data);
       const head = (data[0] || []).map((h) => String(h ?? ""));
-      const g = head.findIndex((h) => /번호|번$|no/i.test(h));
+      const g = head.findIndex((h) => /학번|번호|번$|no/i.test(h));
       setNoCol(g >= 0 ? g : 0);
       setNameCol(-1);
     } catch {
@@ -328,27 +445,43 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
     }
   }
 
+  // 학번 열 하나만 지정하면 됩니다.
+  // 반 안의 번호는 학번 뒤 두 자리에서 뽑고, 안 되면 순서대로 매깁니다.
   const parsed = useMemo(() => {
     if (!rows) return [];
     const seen = new Set();
     const out = [];
     rows.forEach((r) => {
-      const n = Number(String(r?.[noCol] ?? "").trim());
-      if (!Number.isInteger(n) || n < 1 || n > 99 || seen.has(n)) return;
-      seen.add(n);
+      const code = String(r?.[noCol] ?? "").trim();
+      if (!/^\d{2,10}$/.test(code) || seen.has(code)) return;
+      seen.add(code);
+      let no = Number(code.slice(-2));
+      if (!Number.isInteger(no) || no < 1) no = out.length + 1;
       out.push({
-        no: n,
+        code,
+        no,
         name: nameCol >= 0 ? String(r?.[nameCol] ?? "").trim() : "",
       });
     });
-    return out.sort((a, b) => a.no - b.no);
+    // 반 안 번호가 겹치면 순서대로 다시 매깁니다.
+    const used = new Set();
+    out.forEach((s, i) => {
+      if (used.has(s.no)) s.no = i + 1;
+      used.add(s.no);
+    });
+    return out.sort((a, b) => a.code.localeCompare(b.code));
   }, [rows, noCol, nameCol]);
+
+  const [done, setDone] = useState(null);
 
   async function apply() {
     setBusy(true);
+    setDone(null);
     try {
-      setStudents(await db.syncStudents(klass.id, parsed));
+      const r = await db.createStudents(klass.id, parsed);
+      setStudents(await db.listStudents(klass.id));
       setRows(null);
+      setDone(r);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -375,7 +508,7 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
           엑셀로 학생 올리기
         </h2>
         <p className="mb-3 text-sm text-slate-500">
-          번호 열 하나만 있으면 됩니다. 이름 열은 지정할 때만 저장됩니다.
+          학번 열 하나만 있으면 됩니다. 1학년 1반 1번이면 1101 처럼 적힌 열입니다.
         </p>
         <div
           onDragOver={(e) => e.preventDefault()}
@@ -403,7 +536,7 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
           <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
             <span className="font-semibold text-slate-700">열 지정</span>
             <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-white">
-              번호 = {noCol + 1}번째 열
+              학번 = {noCol + 1}번째 열
             </span>
             <button
               onClick={() => setNameCol(nameCol >= 0 ? -1 : noCol + 1)}
@@ -452,7 +585,7 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
               disabled={!parsed.length || busy}
               className="rounded bg-yellow-400 px-4 py-2 text-sm font-semibold text-slate-900 disabled:opacity-40"
             >
-              {busy ? "올리는 중…" : "이 명단으로 바꾸기"}
+              {busy ? "계정 만드는 중…" : "명단 등록하고 계정 만들기"}
             </button>
             <button
               onClick={() => setRows(null)}
@@ -464,6 +597,21 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
         </div>
       )}
 
+      {done && (
+        <div className="rounded bg-emerald-50 p-4 text-sm text-emerald-900 shadow-sm">
+          계정 {done.created}개를 새로 만들었습니다.
+          {done.existing > 0 && ` 이미 있던 계정 ${done.existing}개는 그대로 뒀습니다.`}
+          {done.failed?.length > 0 && (
+            <span className="mt-1 block text-rose-700">
+              실패 {done.failed.length}건: {done.failed.map((f) => f.code).join(", ")}
+            </span>
+          )}
+          <span className="mt-1 block text-emerald-800">
+            학생 초기 비밀번호는 000000 입니다.
+          </span>
+        </div>
+      )}
+
       <div className="rounded bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-700">
@@ -471,7 +619,11 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
           </h2>
           <button
             onClick={async () => {
-              setStudents(await db.syncStudents(klass.id, []));
+              try {
+                setStudents(await db.syncStudents(klass.id, []));
+              } catch (e) {
+                setError(e.message);
+              }
             }}
             className="flex items-center gap-1 text-sm text-slate-500 hover:text-rose-600"
           >
@@ -484,7 +636,7 @@ function Roster({ klass, setKlass, students, setStudents, setError }) {
               key={s.id}
               className="rounded bg-slate-100 px-2.5 py-1 text-sm tabular-nums text-slate-700"
             >
-              {s.student_no}
+              {s.student_code || s.student_no}
               {s.name && <span className="ml-1">{s.name}</span>}
             </span>
           ))}
@@ -547,7 +699,7 @@ function Report({ klass, students }) {
           {students.map((st) => (
             <tr key={st.id} className="border-b border-slate-100">
               <td className="sticky left-0 bg-white px-4 py-2 font-medium">
-                {st.name || `${st.student_no}번`}
+                {st.name || st.student_code || `${st.student_no}번`}
               </td>
               {cols.map((s) => {
                 const r = cell(s.id, st.id);

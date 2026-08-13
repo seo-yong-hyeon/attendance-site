@@ -1,74 +1,76 @@
 # 세연중학교 출석부
 
-담임용 조회·종례 출결 기록. Next.js + Supabase.
+담임용 조회·종례 출결 + 학생 QR 출결. Next.js + Supabase.
 
-## 1. 폴더 준비
+## 1. Supabase SQL 실행
 
-이 폴더 전체를 컴퓨터 원하는 곳에 두면 됩니다. `create-next-app` 을 따로 돌릴
-필요는 없습니다. 필요한 설정 파일이 모두 들어 있습니다.
-
-필요한 것은 **Node.js 20 이상** 하나뿐입니다. https://nodejs.org 에서 LTS 를
-받아 설치하세요. 이미 낮은 버전이 깔려 있으면 그 위에 덮어 설치하면 됩니다.
-
-폴더 안에 아래 파일들이 다 있어야 합니다.
+Supabase 대시보드 → SQL Editor 에서 `supabase/migrations` 안의 파일을
+번호 순서대로 실행합니다.
 
 ```
-package.json      setup.bat        start.bat
-next.config.js    postcss.config.js  tailwind.config.js
-app/  components/  lib/  supabase/
+001_schema.sql
+002_student_name.sql
+004_student_code_and_qr.sql
 ```
 
-## 2. Supabase 준비
+## 2. Supabase 설정 두 가지
 
-1. supabase.com 에서 프로젝트 생성 (리전은 Northeast Asia / Seoul)
-2. SQL Editor 에 `attendance_schema.sql` 실행
-3. 이어서 `supabase/migrations/002_student_name.sql` 실행
-4. Authentication → Providers → Email 켜기
-   - 혼자 쓸 거면 Confirm email 을 꺼두면 가입 즉시 로그인됩니다
+Authentication → Providers → Email
 
-## 3. 환경변수
+- **Confirm email 끄기** — 학생 계정은 실제 메일 주소가 아니라서
+  이게 켜져 있으면 학생 로그인이 전부 막힙니다.
 
-`.env.local.example` 을 `.env.local` 로 복사하고 값을 채웁니다.
-값은 Supabase 대시보드 → Project Settings → API 에 있습니다.
+Authentication → URL Configuration
 
-```
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-```
+- Site URL 과 Redirect URLs 에 배포 주소를 넣습니다.
 
-`service_role` 키는 절대 여기 넣지 마세요. 브라우저에 그대로 노출됩니다.
+## 3. 실행
 
-## 4. 실행 (Windows)
+`setup.bat` 한 번 → 이후로는 `start.bat`.
+`.env.local` 은 이미 채워져 있습니다.
 
-`setup.bat` 을 한 번 실행해 설치하고, 다음부터는 `start.bat` 만 두 번 클릭하면 됩니다.
+## 4. 배포
 
-### 직접 명령으로 실행하려면
+`git-upload.bat` (처음) / `git-push.bat` (이후).
+Vercel 프로젝트 Settings → Environment Variables 에
+`.env.local` 의 두 줄을 똑같이 등록해야 합니다.
 
-```bash
-npm run dev
-```
+## 쓰는 순서
 
-http://localhost:3000 에서 가입 → 로그인 → 학생관리 탭에서 엑셀 올리기 → 출석부.
-
-## 5. 배포
-
-GitHub 저장소에 올리고 Vercel 에서 Import.
-Vercel 프로젝트 Settings → Environment Variables 에 위 두 값을 똑같이 등록해야
-배포본에서 동작합니다.
+1. 선생님 탭으로 가입 후 로그인
+2. 학생관리 탭에서 엑셀(학번 열)로 명단 올리기
+3. 학생에게 학번 알려주기 — 첫 비밀번호는 0000
+4. 출석부 탭 → QR 출결 → 교실 화면에 띄우기
+5. 학생이 휴대폰 카메라로 QR 촬영
 
 ## 구조
 
 ```
-app/page.jsx              로그인 확인 후 출석부 표시
-components/AuthGate.jsx   이메일 로그인·가입
-components/AttendanceApp  출석부 / 학생관리 / 지각·결석 조회
-lib/supabaseClient.js     Supabase 연결
-lib/codes.js              화면 코드 ↔ DB status·reason 변환
-lib/db.js                 모든 조회·저장 함수
+app/page.jsx            로그인 후 역할에 따라 화면 분기
+app/checkin/page.jsx    QR 을 찍으면 열리는 출석 처리 화면
+components/AuthGate     학생(학번) / 선생님(이메일) 로그인
+components/AttendanceApp 교사 화면 + QR 모달
+components/StudentApp   학생 화면 + 비밀번호 변경
+lib/db.js               모든 조회·저장
+lib/codes.js            화면 코드 ↔ DB status·reason
 ```
+
+## 반편성 탭
+
+선생님 화면의 네 번째 탭입니다. 전교생 명단을 엑셀로 올리면
+성별과 점수를 고르게 나눠 반을 배정합니다.
+
+- 같은 반이 되면 안 되는 학생을 조로 묶어 제약을 걸 수 있습니다
+- 학생을 눌러 두 명을 고르면 서로 자리가 바뀝니다
+- 오른쪽 드롭다운으로 다른 반에 바로 옮길 수 있습니다
+- 되돌리기, 엑셀 내보내기 지원
+
+이 탭의 자료는 **서버로 보내지 않고 브라우저에만 저장**됩니다.
+전교생 이름과 생년월일이 모이는 작업이라 일부러 이렇게 했습니다.
+다른 컴퓨터에서는 보이지 않고, 브라우저 자료를 지우면 함께 사라집니다.
 
 ## 아직 안 된 것
 
 - 엑셀 내보내기 버튼 (화면만 있고 동작 없음)
-- QR 출결
-- 세션 마감 (`closeSession` 함수는 있으나 화면 미연결)
+- 비밀번호 분실 시 담임이 초기화하는 기능
+- 세션 마감
