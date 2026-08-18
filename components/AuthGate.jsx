@@ -68,6 +68,10 @@ function LoginScreen() {
           {role === "student" ? <StudentLogin /> : <TeacherLogin />}
         </div>
       </div>
+
+      <a href="/python" className="mt-4 text-xs text-slate-400 hover:text-slate-200">
+        파이썬 코드 실행 페이지 →
+      </a>
     </div>
   );
 }
