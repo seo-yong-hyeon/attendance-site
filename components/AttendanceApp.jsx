@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabaseClient";
 import { CODES, codeOf, fromRow } from "../lib/codes";
 import * as db from "../lib/db";
 import PlacementApp from "./placement/PlacementApp";
+import PasswordChangeButton from "./PasswordChangeModal";
 
 const SCHOOL = "세연중학교";
 const DAY = ["일", "월", "화", "수", "목", "금", "토"];
@@ -149,12 +150,15 @@ export default function AttendanceApp() {
       <div className="bg-slate-800">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 pb-2 pt-4">
           <h1 className="text-lg font-semibold text-white">{SCHOOL}</h1>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
-          >
-            <LogOut size={14} /> 로그아웃
-          </button>
+          <div className="flex items-center gap-4">
+            <PasswordChangeButton className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white" />
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
+            >
+              <LogOut size={14} /> 로그아웃
+            </button>
+          </div>
         </div>
         <nav className="mx-auto flex max-w-5xl gap-6 px-5">
           {tabs.map((t) => (

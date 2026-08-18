@@ -69,8 +69,8 @@ function LoginScreen() {
         </div>
       </div>
 
-      <a href="/python" className="mt-4 text-xs text-slate-400 hover:text-slate-200">
-        파이썬 코드 실행 페이지 →
+      <a href="/tools" className="mt-4 text-xs text-slate-400 hover:text-slate-200">
+        파이썬 실행 · 반편성 도구 →
       </a>
     </div>
   );

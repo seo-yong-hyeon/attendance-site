@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LogOut, UserPlus, ShieldCheck } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import * as db from "../lib/db";
+import PasswordChangeButton from "./PasswordChangeModal";
 
 export default function MasterApp() {
   const [teachers, setTeachers] = useState([]);
@@ -36,12 +37,15 @@ export default function MasterApp() {
             <ShieldCheck size={18} className="text-yellow-400" />
             관리자
           </h1>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="flex items-center gap-1 text-sm text-slate-300 hover:text-white"
-          >
-            <LogOut size={14} /> 로그아웃
-          </button>
+          <div className="flex items-center gap-4">
+            <PasswordChangeButton className="flex items-center gap-1 text-sm text-slate-300 hover:text-white" />
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="flex items-center gap-1 text-sm text-slate-300 hover:text-white"
+            >
+              <LogOut size={14} /> 로그아웃
+            </button>
+          </div>
         </div>
       </div>
 

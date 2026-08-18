@@ -1,9 +1,5 @@
-import PythonPlayground from "../../components/PythonPlayground";
-
-export const metadata = {
-  title: "파이썬 실행 - 세연중학교 출석부",
-};
+import { redirect } from "next/navigation";
 
 export default function PythonPage() {
-  return <PythonPlayground />;
+  redirect("/tools?tab=python");
 }
