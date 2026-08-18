@@ -7,7 +7,6 @@ import QRCode from "qrcode";
 import { supabase } from "../lib/supabaseClient";
 import { CODES, codeOf, fromRow } from "../lib/codes";
 import * as db from "../lib/db";
-import PlacementApp from "./placement/PlacementApp";
 import PasswordChangeButton from "./PasswordChangeModal";
 
 const SCHOOL = "세연중학교";
@@ -139,7 +138,6 @@ export default function AttendanceApp() {
     { id: "sheet", label: "출석부" },
     { id: "roster", label: "학생관리" },
     { id: "report", label: "지각/결석 조회" },
-    { id: "placement", label: "반편성" },
   ];
 
   if (loading)
@@ -215,7 +213,6 @@ export default function AttendanceApp() {
           />
         )}
         {tab === "report" && <Report klass={klass} students={students} />}
-        {tab === "placement" && <PlacementApp />}
       </div>
 
       {qrSession && (
